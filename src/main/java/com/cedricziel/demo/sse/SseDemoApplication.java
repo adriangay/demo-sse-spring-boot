@@ -4,18 +4,19 @@ import org.apache.log4j.Logger;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.http.MediaType;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
-import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import javax.validation.Valid;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 @Controller
+@EnableScheduling
 @SpringBootApplication
 public class SseDemoApplication {
 
@@ -33,27 +34,26 @@ public class SseDemoApplication {
 
         SseEmitter emitter = new SseEmitter();
 
-        emitters.add(emitter);
+        synchronized ( emitters ) { emitters.add(emitter); }
         emitter.onCompletion(() -> emitters.remove(emitter));
 
         return emitter;
     }
 
-    @ResponseBody
-    @RequestMapping(path = "/chat", method = RequestMethod.POST)
-    public Message sendMessage(@Valid Message message) {
+    @Scheduled(fixedRate = 5000)
+    public void sendMessage() {
 
-        log.info("Got message" + message);
-
+        String message = "{\"timestamp\": \"" + String.valueOf(System.currentTimeMillis()) + "\"}";
+ 
         emitters.forEach((SseEmitter emitter) -> {
             try {
-                emitter.send(message, MediaType.APPLICATION_JSON);
+               log.info("Emitting... " + message + " to emitter: " + emitter.toString());
+               emitter.send(message, MediaType.APPLICATION_JSON);
             } catch (IOException e) {
                 emitter.complete();
                 emitters.remove(emitter);
-                e.printStackTrace();
+                log.info(e.getMessage());;
             }
         });
-        return message;
-    }
+     }
 }
